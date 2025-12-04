@@ -1,61 +1,289 @@
-// Estado de la aplicación
+// ==========================================
+// BASE DE DATOS IndexedDB
+// ==========================================
+
+const DB_NAME = 'ChaconaStudyDB';
+const DB_VERSION = 1;
+let db = null;
+
+// Inicializar IndexedDB
+function initDB() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+            db = request.result;
+            resolve(db);
+        };
+
+        request.onupgradeneeded = (event) => {
+            const database = event.target.result;
+
+            // Store para datos de estudio (notas, completado, fecha)
+            if (!database.objectStoreNames.contains('studyData')) {
+                database.createObjectStore('studyData', { keyPath: 'id' });
+            }
+
+            // Store para archivos de audio (binarios)
+            if (!database.objectStoreNames.contains('audioFiles')) {
+                database.createObjectStore('audioFiles', { keyPath: 'id' });
+            }
+        };
+    });
+}
+
+// Guardar datos de estudio
+function saveStudyDataToDB(index, data) {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['studyData'], 'readwrite');
+        const store = transaction.objectStore('studyData');
+        const request = store.put({ id: index, ...data });
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+    });
+}
+
+// Cargar datos de estudio
+function loadStudyDataFromDB() {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['studyData'], 'readonly');
+        const store = transaction.objectStore('studyData');
+        const request = store.getAll();
+        request.onsuccess = () => {
+            const data = {};
+            request.result.forEach(item => {
+                data[item.id] = {
+                    completed: item.completed || false,
+                    completedDate: item.completedDate || null,
+                    notes: item.notes || ''
+                };
+            });
+            resolve(data);
+        };
+        request.onerror = () => reject(request.error);
+    });
+}
+
+// Guardar audio
+function saveAudioToDB(index, audioBlob) {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['audioFiles'], 'readwrite');
+        const store = transaction.objectStore('audioFiles');
+        const request = store.put({ id: index, audio: audioBlob });
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+    });
+}
+
+// Cargar audio
+function loadAudioFromDB(index) {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['audioFiles'], 'readonly');
+        const store = transaction.objectStore('audioFiles');
+        const request = store.get(index);
+        request.onsuccess = () => resolve(request.result?.audio || null);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+// Eliminar audio
+function deleteAudioFromDB(index) {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['audioFiles'], 'readwrite');
+        const store = transaction.objectStore('audioFiles');
+        const request = store.delete(index);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+    });
+}
+
+// Obtener todos los audios
+function getAllAudiosFromDB() {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['audioFiles'], 'readonly');
+        const store = transaction.objectStore('audioFiles');
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+// ==========================================
+// EXPORTAR / IMPORTAR
+// ==========================================
+
+async function exportData() {
+    try {
+        const studyData = await loadStudyDataFromDB();
+        const audios = await getAllAudiosFromDB();
+
+        // Convertir audios (Blob) a base64 para exportar
+        const audiosBase64 = await Promise.all(
+            audios.map(async (item) => {
+                if (item.audio instanceof Blob) {
+                    const base64 = await blobToBase64(item.audio);
+                    return { id: item.id, audio: base64 };
+                }
+                return item;
+            })
+        );
+
+        const exportObj = {
+            version: 1,
+            exportDate: new Date().toISOString(),
+            studyData: studyData,
+            audioFiles: audiosBase64
+        };
+
+        const json = JSON.stringify(exportObj);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `chacona-backup-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+
+        URL.revokeObjectURL(url);
+        showNotification('Backup exportado correctamente', 'success');
+    } catch (error) {
+        console.error('Error exportando:', error);
+        showNotification('Error al exportar', 'error');
+    }
+}
+
+async function importData(file) {
+    try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+
+        if (!data.version || !data.studyData) {
+            throw new Error('Formato de archivo inválido');
+        }
+
+        // Importar datos de estudio
+        for (const [index, item] of Object.entries(data.studyData)) {
+            await saveStudyDataToDB(parseInt(index), item);
+        }
+
+        // Importar audios (convertir base64 a Blob)
+        if (data.audioFiles) {
+            for (const item of data.audioFiles) {
+                if (item.audio) {
+                    const blob = base64ToBlob(item.audio);
+                    await saveAudioToDB(item.id, blob);
+                }
+            }
+        }
+
+        // Recargar datos
+        studyData = await loadStudyDataFromDB();
+        buildSidebar();
+        loadVariation(currentVariation);
+        updateProgress();
+
+        showNotification('Backup importado correctamente', 'success');
+    } catch (error) {
+        console.error('Error importando:', error);
+        showNotification('Error al importar: ' + error.message, 'error');
+    }
+}
+
+// Utilidades para conversión
+function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+}
+
+function base64ToBlob(base64) {
+    const parts = base64.split(';base64,');
+    const contentType = parts[0].split(':')[1];
+    const raw = window.atob(parts[1]);
+    const rawLength = raw.length;
+    const uInt8Array = new Uint8Array(rawLength);
+
+    for (let i = 0; i < rawLength; ++i) {
+        uInt8Array[i] = raw.charCodeAt(i);
+    }
+
+    return new Blob([uInt8Array], { type: contentType });
+}
+
+// Notificaciones
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+
+    setTimeout(() => notification.classList.add('show'), 10);
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// ==========================================
+// APLICACIÓN PRINCIPAL
+// ==========================================
+
 let currentVariation = 0;
 let studyData = {};
 
 // Elementos del DOM
-const elements = {
-    sidebar: document.getElementById('sidebar'),
-    mobileMenuBtn: document.getElementById('mobileMenuBtn'),
-    progressFill: document.getElementById('progressFill'),
-    progressText: document.getElementById('progressText'),
-    variationTitle: document.getElementById('variationTitle'),
-    manuscriptImg: document.getElementById('manuscriptImg'),
-    variationDescription: document.getElementById('variationDescription'),
-    completedCheckbox: document.getElementById('completedCheckbox'),
-    dateCompleted: document.getElementById('dateCompleted'),
-    notesTextarea: document.getElementById('notesTextarea'),
-    autosaveIndicator: document.getElementById('autosaveIndicator'),
-    audioInput: document.getElementById('audioInput'),
-    uploadBtn: document.getElementById('uploadBtn'),
-    uploadArea: document.getElementById('uploadArea'),
-    playerContainer: document.getElementById('playerContainer'),
-    audioPlayer: document.getElementById('audioPlayer'),
-    removeAudioBtn: document.getElementById('removeAudioBtn'),
-    prevBtn: document.getElementById('prevBtn'),
-    nextBtn: document.getElementById('nextBtn')
-};
+const elements = {};
 
 // Inicialización
-document.addEventListener('DOMContentLoaded', () => {
-    loadStudyData();
+document.addEventListener('DOMContentLoaded', async () => {
+    // Cachear elementos del DOM
+    elements.sidebar = document.getElementById('sidebar');
+    elements.mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    elements.progressFill = document.getElementById('progressFill');
+    elements.progressText = document.getElementById('progressText');
+    elements.variationTitle = document.getElementById('variationTitle');
+    elements.manuscriptImg = document.getElementById('manuscriptImg');
+    elements.variationDescription = document.getElementById('variationDescription');
+    elements.completedCheckbox = document.getElementById('completedCheckbox');
+    elements.dateCompleted = document.getElementById('dateCompleted');
+    elements.notesTextarea = document.getElementById('notesTextarea');
+    elements.autosaveIndicator = document.getElementById('autosaveIndicator');
+    elements.audioInput = document.getElementById('audioInput');
+    elements.uploadBtn = document.getElementById('uploadBtn');
+    elements.uploadArea = document.getElementById('uploadArea');
+    elements.playerContainer = document.getElementById('playerContainer');
+    elements.audioPlayer = document.getElementById('audioPlayer');
+    elements.removeAudioBtn = document.getElementById('removeAudioBtn');
+    elements.prevBtn = document.getElementById('prevBtn');
+    elements.nextBtn = document.getElementById('nextBtn');
+    elements.exportBtn = document.getElementById('exportBtn');
+    elements.importBtn = document.getElementById('importBtn');
+    elements.importInput = document.getElementById('importInput');
+
+    // Inicializar DB y cargar datos
+    await initDB();
+    studyData = await loadStudyDataFromDB();
+
+    // Inicializar datos vacíos si no existen
+    for (let i = 0; i < VARIACIONES.length; i++) {
+        if (!studyData[i]) {
+            studyData[i] = {
+                completed: false,
+                completedDate: null,
+                notes: ''
+            };
+        }
+    }
+
     buildSidebar();
     loadVariation(currentVariation);
     setupEventListeners();
     updateProgress();
 });
-
-// Cargar datos guardados
-function loadStudyData() {
-    const saved = localStorage.getItem('chaconaStudyData');
-    if (saved) {
-        studyData = JSON.parse(saved);
-    } else {
-        // Inicializar datos vacíos para cada variación
-        VARIACIONES.forEach((v, i) => {
-            studyData[i] = {
-                completed: false,
-                completedDate: null,
-                notes: '',
-                audioData: null
-            };
-        });
-    }
-}
-
-// Guardar datos
-function saveStudyData() {
-    localStorage.setItem('chaconaStudyData', JSON.stringify(studyData));
-}
 
 // Construir sidebar con las variaciones
 function buildSidebar() {
@@ -109,7 +337,7 @@ function buildSidebar() {
 }
 
 // Cargar una variación
-function loadVariation(index) {
+async function loadVariation(index) {
     currentVariation = index;
     const variation = VARIACIONES[index];
     const data = studyData[index] || {};
@@ -129,11 +357,13 @@ function loadVariation(index) {
     // Notas
     elements.notesTextarea.value = data.notes || '';
 
-    // Audio
-    if (data.audioData) {
+    // Audio desde IndexedDB
+    const audioBlob = await loadAudioFromDB(index);
+    if (audioBlob) {
+        const audioUrl = URL.createObjectURL(audioBlob);
         elements.uploadArea.style.display = 'none';
         elements.playerContainer.style.display = 'flex';
-        elements.audioPlayer.src = data.audioData;
+        elements.audioPlayer.src = audioUrl;
     } else {
         elements.uploadArea.style.display = 'flex';
         elements.playerContainer.style.display = 'none';
@@ -145,7 +375,6 @@ function loadVariation(index) {
         item.classList.remove('active');
         if (parseInt(item.dataset.index) === index) {
             item.classList.add('active');
-            // Scroll to item
             item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
     });
@@ -186,7 +415,7 @@ function setupEventListeners() {
     });
 
     // Checkbox completada
-    elements.completedCheckbox.addEventListener('change', (e) => {
+    elements.completedCheckbox.addEventListener('change', async (e) => {
         studyData[currentVariation].completed = e.target.checked;
         studyData[currentVariation].completedDate = e.target.checked
             ? new Date().toLocaleDateString('es-ES')
@@ -196,7 +425,7 @@ function setupEventListeners() {
             ? `Completada: ${studyData[currentVariation].completedDate}`
             : '';
 
-        saveStudyData();
+        await saveStudyDataToDB(currentVariation, studyData[currentVariation]);
         updateSidebarItem(currentVariation);
         updateProgress();
     });
@@ -208,9 +437,10 @@ function setupEventListeners() {
         elements.autosaveIndicator.className = 'autosave-indicator saving';
 
         clearTimeout(notesTimeout);
-        notesTimeout = setTimeout(() => {
+        notesTimeout = setTimeout(async () => {
             studyData[currentVariation].notes = elements.notesTextarea.value;
-            saveStudyData();
+            await saveStudyDataToDB(currentVariation, studyData[currentVariation]);
+
             elements.autosaveIndicator.textContent = 'Guardado ✓';
             elements.autosaveIndicator.className = 'autosave-indicator saved';
 
@@ -226,34 +456,50 @@ function setupEventListeners() {
         elements.audioInput.click();
     });
 
-    elements.audioInput.addEventListener('change', (e) => {
+    elements.audioInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const audioData = event.target.result;
-                studyData[currentVariation].audioData = audioData;
-                saveStudyData();
+            // Guardar como Blob en IndexedDB
+            await saveAudioToDB(currentVariation, file);
 
-                elements.uploadArea.style.display = 'none';
-                elements.playerContainer.style.display = 'flex';
-                elements.audioPlayer.src = audioData;
-            };
-            reader.readAsDataURL(file);
+            const audioUrl = URL.createObjectURL(file);
+            elements.uploadArea.style.display = 'none';
+            elements.playerContainer.style.display = 'flex';
+            elements.audioPlayer.src = audioUrl;
+
+            showNotification('Audio guardado', 'success');
         }
     });
 
     // Eliminar audio
-    elements.removeAudioBtn.addEventListener('click', () => {
+    elements.removeAudioBtn.addEventListener('click', async () => {
         if (confirm('¿Eliminar esta grabación?')) {
-            studyData[currentVariation].audioData = null;
-            saveStudyData();
+            await deleteAudioFromDB(currentVariation);
 
             elements.uploadArea.style.display = 'flex';
             elements.playerContainer.style.display = 'none';
             elements.audioPlayer.src = '';
             elements.audioInput.value = '';
+
+            showNotification('Audio eliminado', 'info');
         }
+    });
+
+    // Exportar / Importar
+    elements.exportBtn.addEventListener('click', exportData);
+
+    elements.importBtn.addEventListener('click', () => {
+        elements.importInput.click();
+    });
+
+    elements.importInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            if (confirm('¿Importar backup? Esto sobrescribirá los datos actuales.')) {
+                importData(file);
+            }
+        }
+        e.target.value = '';
     });
 
     // Mobile menu
@@ -310,4 +556,4 @@ overlay.addEventListener('click', closeMobileMenu);
 const observer = new MutationObserver(() => {
     overlay.classList.toggle('active', elements.sidebar.classList.contains('open'));
 });
-observer.observe(elements.sidebar, { attributes: true, attributeFilter: ['class'] });
+observer.observe(document.getElementById('sidebar'), { attributes: true, attributeFilter: ['class'] });
