@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chacona BWV 1004 - Plan de Estudio</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h1>Chacona BWV 1004</h1>
+                <p class="subtitle">Plan de Estudio</p>
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <span class="progress-text" id="progressText">0/64 completadas</span>
+                </div>
+            </div>
+
+            <nav class="sections-nav" id="sectionsNav">
+                <!-- Sección Re menor I -->
+                <div class="section-group">
+                    <button class="section-header" data-section="re-menor-1">
+                        <span class="section-icon">▼</span>
+                        <span class="section-title">Re menor (I)</span>
+                        <span class="section-count">1-33</span>
+                    </button>
+                    <div class="section-items" id="section-re-menor-1"></div>
+                </div>
+
+                <!-- Sección Re Mayor -->
+                <div class="section-group">
+                    <button class="section-header" data-section="re-mayor">
+                        <span class="section-icon">▶</span>
+                        <span class="section-title">Re Mayor</span>
+                        <span class="section-count">34-52</span>
+                    </button>
+                    <div class="section-items collapsed" id="section-re-mayor"></div>
+                </div>
+
+                <!-- Sección Re menor II -->
+                <div class="section-group">
+                    <button class="section-header" data-section="re-menor-2">
+                        <span class="section-icon">▶</span>
+                        <span class="section-title">Re menor (II)</span>
+                        <span class="section-count">53-64</span>
+                    </button>
+                    <div class="section-items collapsed" id="section-re-menor-2"></div>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Mobile menu button -->
+        <button class="mobile-menu-btn" id="mobileMenuBtn">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+
+        <!-- Main Content -->
+        <main class="main-content" id="mainContent">
+            <div class="variation-view" id="variationView">
+                <!-- Header -->
+                <div class="variation-header">
+                    <div class="nav-buttons">
+                        <button class="nav-btn" id="prevBtn" title="Anterior">◀</button>
+                        <h2 class="variation-title" id="variationTitle">Variación 1 (Tema)</h2>
+                        <button class="nav-btn" id="nextBtn" title="Siguiente">▶</button>
+                    </div>
+                    <div class="variation-status">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="completedCheckbox">
+                            <span class="checkmark"></span>
+                            <span class="checkbox-label">Estudiada</span>
+                        </label>
+                        <span class="date-completed" id="dateCompleted"></span>
+                    </div>
+                </div>
+
+                <!-- Manuscript Image -->
+                <div class="manuscript-section">
+                    <h3>Manuscrito</h3>
+                    <div class="manuscript-container">
+                        <img id="manuscriptImg" src="" alt="Manuscrito de la variación">
+                    </div>
+                </div>
+
+                <!-- Description -->
+                <div class="description-section">
+                    <h3>Descripción</h3>
+                    <p id="variationDescription"></p>
+                </div>
+
+                <!-- Recording Section -->
+                <div class="recording-section">
+                    <h3>Mi Grabación</h3>
+                    <div class="recording-container">
+                        <div class="upload-area" id="uploadArea">
+                            <input type="file" id="audioInput" accept="audio/*" hidden>
+                            <button class="upload-btn" id="uploadBtn">
+                                <span class="upload-icon">🎵</span>
+                                <span>Subir audio</span>
+                            </button>
+                            <p class="upload-hint">MP3, WAV, M4A...</p>
+                        </div>
+                        <div class="player-container" id="playerContainer" style="display: none;">
+                            <audio id="audioPlayer" controls></audio>
+                            <button class="remove-audio-btn" id="removeAudioBtn" title="Eliminar grabación">✕</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notes Section -->
+                <div class="notes-section">
+                    <h3>Mis Notas</h3>
+                    <textarea id="notesTextarea" placeholder="Escribe tus observaciones, dificultades, ideas de interpretación..."></textarea>
+                    <div class="notes-footer">
+                        <span class="autosave-indicator" id="autosaveIndicator">Guardado automático</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/data.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
