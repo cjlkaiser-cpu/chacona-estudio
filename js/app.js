@@ -455,6 +455,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     buildSidebar();
     loadVariation(currentVariation);
     setupEventListeners();
+    setupMobileOverlay();
     updateProgress();
 });
 
@@ -764,22 +765,25 @@ function updateProgress() {
 }
 
 // Mobile menu
+let overlay = null;
+
 function toggleMobileMenu() {
     elements.sidebar.classList.toggle('open');
+    if (overlay) {
+        overlay.classList.toggle('active', elements.sidebar.classList.contains('open'));
+    }
 }
 
 function closeMobileMenu() {
     elements.sidebar.classList.remove('open');
+    if (overlay) {
+        overlay.classList.remove('active');
+    }
 }
 
-// Crear overlay para mobile
-const overlay = document.createElement('div');
-overlay.className = 'sidebar-overlay';
-document.body.appendChild(overlay);
-overlay.addEventListener('click', closeMobileMenu);
-
-// Observar cambios en sidebar para overlay
-const observer = new MutationObserver(() => {
-    overlay.classList.toggle('active', elements.sidebar.classList.contains('open'));
-});
-observer.observe(document.getElementById('sidebar'), { attributes: true, attributeFilter: ['class'] });
+function setupMobileOverlay() {
+    overlay = document.createElement('div');
+    overlay.className = 'sidebar-overlay';
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', closeMobileMenu);
+}
