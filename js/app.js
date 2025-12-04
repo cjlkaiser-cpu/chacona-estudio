@@ -40,6 +40,7 @@ function initDB() {
 
 // Guardar datos de estudio
 function saveStudyDataToDB(index, data) {
+    if (!db) return Promise.resolve();
     return new Promise((resolve, reject) => {
         const transaction = db.transaction(['studyData'], 'readwrite');
         const store = transaction.objectStore('studyData');
@@ -72,6 +73,7 @@ function loadStudyDataFromDB() {
 
 // Guardar audio
 function saveAudioToDB(index, audioBlob) {
+    if (!db) return Promise.resolve();
     return new Promise((resolve, reject) => {
         const transaction = db.transaction(['audioFiles'], 'readwrite');
         const store = transaction.objectStore('audioFiles');
@@ -83,6 +85,7 @@ function saveAudioToDB(index, audioBlob) {
 
 // Cargar audio
 function loadAudioFromDB(index) {
+    if (!db) return Promise.resolve(null);
     return new Promise((resolve, reject) => {
         const transaction = db.transaction(['audioFiles'], 'readonly');
         const store = transaction.objectStore('audioFiles');
@@ -94,6 +97,7 @@ function loadAudioFromDB(index) {
 
 // Eliminar audio
 function deleteAudioFromDB(index) {
+    if (!db) return Promise.resolve();
     return new Promise((resolve, reject) => {
         const transaction = db.transaction(['audioFiles'], 'readwrite');
         const store = transaction.objectStore('audioFiles');
@@ -105,6 +109,7 @@ function deleteAudioFromDB(index) {
 
 // Obtener todos los audios
 function getAllAudiosFromDB() {
+    if (!db) return Promise.resolve([]);
     return new Promise((resolve, reject) => {
         const transaction = db.transaction(['audioFiles'], 'readonly');
         const store = transaction.objectStore('audioFiles');
@@ -116,6 +121,7 @@ function getAllAudiosFromDB() {
 
 // Guardar foto
 function savePhotoToDB(index, photoBlob) {
+    if (!db) return Promise.resolve();
     return new Promise((resolve, reject) => {
         const transaction = db.transaction(['photoFiles'], 'readwrite');
         const store = transaction.objectStore('photoFiles');
@@ -127,6 +133,7 @@ function savePhotoToDB(index, photoBlob) {
 
 // Cargar foto
 function loadPhotoFromDB(index) {
+    if (!db) return Promise.resolve(null);
     return new Promise((resolve, reject) => {
         const transaction = db.transaction(['photoFiles'], 'readonly');
         const store = transaction.objectStore('photoFiles');
@@ -138,6 +145,7 @@ function loadPhotoFromDB(index) {
 
 // Eliminar foto
 function deletePhotoFromDB(index) {
+    if (!db) return Promise.resolve();
     return new Promise((resolve, reject) => {
         const transaction = db.transaction(['photoFiles'], 'readwrite');
         const store = transaction.objectStore('photoFiles');
@@ -149,6 +157,7 @@ function deletePhotoFromDB(index) {
 
 // Obtener todas las fotos
 function getAllPhotosFromDB() {
+    if (!db) return Promise.resolve([]);
     return new Promise((resolve, reject) => {
         const transaction = db.transaction(['photoFiles'], 'readonly');
         const store = transaction.objectStore('photoFiles');
@@ -395,68 +404,77 @@ const elements = {};
 
 // Inicialización
 document.addEventListener('DOMContentLoaded', async () => {
-    // Cachear elementos del DOM
-    elements.sidebar = document.getElementById('sidebar');
-    elements.mobileMenuBtn = document.getElementById('mobileMenuBtn');
-    elements.progressFill = document.getElementById('progressFill');
-    elements.progressText = document.getElementById('progressText');
-    elements.variationTitle = document.getElementById('variationTitle');
-    elements.manuscriptImg = document.getElementById('manuscriptImg');
-    elements.variationDescription = document.getElementById('variationDescription');
-    elements.completedCheckbox = document.getElementById('completedCheckbox');
-    elements.dateCompleted = document.getElementById('dateCompleted');
-    elements.notesTextarea = document.getElementById('notesTextarea');
-    elements.autosaveIndicator = document.getElementById('autosaveIndicator');
+    try {
+        // Cachear elementos del DOM
+        elements.sidebar = document.getElementById('sidebar');
+        elements.mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        elements.progressFill = document.getElementById('progressFill');
+        elements.progressText = document.getElementById('progressText');
+        elements.variationTitle = document.getElementById('variationTitle');
+        elements.manuscriptImg = document.getElementById('manuscriptImg');
+        elements.variationDescription = document.getElementById('variationDescription');
+        elements.completedCheckbox = document.getElementById('completedCheckbox');
+        elements.dateCompleted = document.getElementById('dateCompleted');
+        elements.notesTextarea = document.getElementById('notesTextarea');
+        elements.autosaveIndicator = document.getElementById('autosaveIndicator');
 
-    // Audio elements
-    elements.audioOptions = document.getElementById('audioOptions');
-    elements.recordBtn = document.getElementById('recordBtn');
-    elements.uploadBtn = document.getElementById('uploadBtn');
-    elements.audioInput = document.getElementById('audioInput');
-    elements.recorderActive = document.getElementById('recorderActive');
-    elements.recTime = document.getElementById('recTime');
-    elements.stopBtn = document.getElementById('stopBtn');
-    elements.playerContainer = document.getElementById('playerContainer');
-    elements.audioPlayer = document.getElementById('audioPlayer');
-    elements.removeAudioBtn = document.getElementById('removeAudioBtn');
+        // Audio elements
+        elements.audioOptions = document.getElementById('audioOptions');
+        elements.recordBtn = document.getElementById('recordBtn');
+        elements.uploadBtn = document.getElementById('uploadBtn');
+        elements.audioInput = document.getElementById('audioInput');
+        elements.recorderActive = document.getElementById('recorderActive');
+        elements.recTime = document.getElementById('recTime');
+        elements.stopBtn = document.getElementById('stopBtn');
+        elements.playerContainer = document.getElementById('playerContainer');
+        elements.audioPlayer = document.getElementById('audioPlayer');
+        elements.removeAudioBtn = document.getElementById('removeAudioBtn');
 
-    // Photo elements
-    elements.photoUploadArea = document.getElementById('photoUploadArea');
-    elements.photoUploadBtn = document.getElementById('photoUploadBtn');
-    elements.photoInput = document.getElementById('photoInput');
-    elements.photoPreviewContainer = document.getElementById('photoPreviewContainer');
-    elements.photoPreview = document.getElementById('photoPreview');
-    elements.removePhotoBtn = document.getElementById('removePhotoBtn');
+        // Photo elements
+        elements.photoUploadArea = document.getElementById('photoUploadArea');
+        elements.photoUploadBtn = document.getElementById('photoUploadBtn');
+        elements.photoInput = document.getElementById('photoInput');
+        elements.photoPreviewContainer = document.getElementById('photoPreviewContainer');
+        elements.photoPreview = document.getElementById('photoPreview');
+        elements.removePhotoBtn = document.getElementById('removePhotoBtn');
 
-    // Navigation
-    elements.prevBtn = document.getElementById('prevBtn');
-    elements.nextBtn = document.getElementById('nextBtn');
+        // Navigation
+        elements.prevBtn = document.getElementById('prevBtn');
+        elements.nextBtn = document.getElementById('nextBtn');
 
-    // Backup
-    elements.exportBtn = document.getElementById('exportBtn');
-    elements.importBtn = document.getElementById('importBtn');
-    elements.importInput = document.getElementById('importInput');
+        // Backup
+        elements.exportBtn = document.getElementById('exportBtn');
+        elements.importBtn = document.getElementById('importBtn');
+        elements.importInput = document.getElementById('importInput');
 
-    // Inicializar DB y cargar datos
-    await initDB();
-    studyData = await loadStudyDataFromDB();
-
-    // Inicializar datos vacíos si no existen
-    for (let i = 0; i < VARIACIONES.length; i++) {
-        if (!studyData[i]) {
-            studyData[i] = {
-                completed: false,
-                completedDate: null,
-                notes: ''
-            };
+        // Inicializar DB y cargar datos
+        try {
+            await initDB();
+            studyData = await loadStudyDataFromDB();
+        } catch (dbError) {
+            console.warn('IndexedDB no disponible, usando modo sin persistencia:', dbError);
+            db = null; // Marcar que no hay DB
         }
-    }
 
-    buildSidebar();
-    loadVariation(currentVariation);
-    setupEventListeners();
-    setupMobileOverlay();
-    updateProgress();
+        // Inicializar datos vacíos si no existen
+        for (let i = 0; i < VARIACIONES.length; i++) {
+            if (!studyData[i]) {
+                studyData[i] = {
+                    completed: false,
+                    completedDate: null,
+                    notes: ''
+                };
+            }
+        }
+
+        buildSidebar();
+        loadVariation(currentVariation);
+        setupEventListeners();
+        setupMobileOverlay();
+        updateProgress();
+    } catch (error) {
+        console.error('Error inicializando app:', error);
+    }
 });
 
 // Construir sidebar con las variaciones
