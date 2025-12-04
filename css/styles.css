@@ -639,6 +639,189 @@ body {
     border-left: 4px solid var(--accent-blue);
 }
 
+/* Audio Options */
+.audio-options {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 1.5rem;
+}
+
+.audio-separator {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.record-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background-color: #dc2626;
+    border: none;
+    border-radius: var(--radius);
+    color: white;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.record-btn:hover {
+    background-color: #b91c1c;
+}
+
+.record-icon {
+    font-size: 1.2rem;
+}
+
+/* Recorder Active State */
+.recorder-active {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem;
+}
+
+.recording-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1.5rem;
+    background-color: rgba(220, 38, 38, 0.1);
+    border-radius: var(--radius);
+}
+
+.rec-dot {
+    width: 12px;
+    height: 12px;
+    background-color: #dc2626;
+    border-radius: 50%;
+    animation: pulse-rec 1s ease-in-out infinite;
+}
+
+@keyframes pulse-rec {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+.rec-text {
+    color: #dc2626;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.rec-time {
+    color: var(--text-primary);
+    font-family: monospace;
+    font-size: 1.1rem;
+}
+
+.stop-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 2rem;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.stop-btn:hover {
+    background-color: var(--border-color);
+}
+
+.stop-btn span {
+    font-size: 0.8rem;
+}
+
+/* Score Photo Section */
+.score-photo-section {
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--border-color);
+}
+
+.score-photo-section h3 {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+}
+
+.photo-upload-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1.5rem;
+    border: 2px dashed var(--border-color);
+    border-radius: var(--radius);
+    transition: border-color 0.2s;
+}
+
+.photo-upload-area:hover {
+    border-color: var(--accent-blue);
+}
+
+.photo-upload-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background-color: var(--accent-blue);
+    border: none;
+    border-radius: var(--radius);
+    color: white;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.photo-upload-btn:hover {
+    background-color: var(--accent-blue-hover);
+}
+
+.photo-icon {
+    font-size: 1.2rem;
+}
+
+.photo-preview-container {
+    position: relative;
+}
+
+.photo-preview-container img {
+    width: 100%;
+    max-height: 400px;
+    object-fit: contain;
+    border-radius: var(--radius);
+    background-color: var(--bg-tertiary);
+}
+
+.remove-photo-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 32px;
+    height: 32px;
+    background-color: rgba(0, 0, 0, 0.7);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.remove-photo-btn:hover {
+    background-color: #ef4444;
+}
+
 /* Mobile backup buttons */
 @media (max-width: 768px) {
     .backup-buttons {
@@ -649,5 +832,14 @@ body {
         left: 1rem;
         right: 1rem;
         bottom: 1rem;
+    }
+
+    .audio-options {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .audio-separator {
+        display: none;
     }
 }

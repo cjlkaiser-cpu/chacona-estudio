@@ -3,7 +3,7 @@
 // ==========================================
 
 const DB_NAME = 'ChaconaStudyDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Incrementado para añadir store de fotos
 let db = null;
 
 // Inicializar IndexedDB
@@ -28,6 +28,11 @@ function initDB() {
             // Store para archivos de audio (binarios)
             if (!database.objectStoreNames.contains('audioFiles')) {
                 database.createObjectStore('audioFiles', { keyPath: 'id' });
+            }
+
+            // Store para fotos de partitura (binarios)
+            if (!database.objectStoreNames.contains('photoFiles')) {
+                database.createObjectStore('photoFiles', { keyPath: 'id' });
             }
         };
     });
@@ -109,6 +114,50 @@ function getAllAudiosFromDB() {
     });
 }
 
+// Guardar foto
+function savePhotoToDB(index, photoBlob) {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['photoFiles'], 'readwrite');
+        const store = transaction.objectStore('photoFiles');
+        const request = store.put({ id: index, photo: photoBlob });
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+    });
+}
+
+// Cargar foto
+function loadPhotoFromDB(index) {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['photoFiles'], 'readonly');
+        const store = transaction.objectStore('photoFiles');
+        const request = store.get(index);
+        request.onsuccess = () => resolve(request.result?.photo || null);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+// Eliminar foto
+function deletePhotoFromDB(index) {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['photoFiles'], 'readwrite');
+        const store = transaction.objectStore('photoFiles');
+        const request = store.delete(index);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+    });
+}
+
+// Obtener todas las fotos
+function getAllPhotosFromDB() {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['photoFiles'], 'readonly');
+        const store = transaction.objectStore('photoFiles');
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
 // ==========================================
 // EXPORTAR / IMPORTAR
 // ==========================================
@@ -117,6 +166,7 @@ async function exportData() {
     try {
         const studyData = await loadStudyDataFromDB();
         const audios = await getAllAudiosFromDB();
+        const photos = await getAllPhotosFromDB();
 
         // Convertir audios (Blob) a base64 para exportar
         const audiosBase64 = await Promise.all(
@@ -129,11 +179,23 @@ async function exportData() {
             })
         );
 
+        // Convertir fotos (Blob) a base64 para exportar
+        const photosBase64 = await Promise.all(
+            photos.map(async (item) => {
+                if (item.photo instanceof Blob) {
+                    const base64 = await blobToBase64(item.photo);
+                    return { id: item.id, photo: base64 };
+                }
+                return item;
+            })
+        );
+
         const exportObj = {
-            version: 1,
+            version: 2,
             exportDate: new Date().toISOString(),
             studyData: studyData,
-            audioFiles: audiosBase64
+            audioFiles: audiosBase64,
+            photoFiles: photosBase64
         };
 
         const json = JSON.stringify(exportObj);
@@ -173,6 +235,16 @@ async function importData(file) {
                 if (item.audio) {
                     const blob = base64ToBlob(item.audio);
                     await saveAudioToDB(item.id, blob);
+                }
+            }
+        }
+
+        // Importar fotos (convertir base64 a Blob)
+        if (data.photoFiles) {
+            for (const item of data.photoFiles) {
+                if (item.photo) {
+                    const blob = base64ToBlob(item.photo);
+                    await savePhotoToDB(item.id, blob);
                 }
             }
         }
@@ -229,6 +301,89 @@ function showNotification(message, type = 'info') {
 }
 
 // ==========================================
+// GRABADOR DE AUDIO
+// ==========================================
+
+let mediaRecorder = null;
+let audioChunks = [];
+let recordingStartTime = null;
+let recordingTimer = null;
+
+async function startRecording() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        // Determinar formato soportado
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm')
+            ? 'audio/webm'
+            : 'audio/mp4';
+
+        mediaRecorder = new MediaRecorder(stream, { mimeType });
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                audioChunks.push(event.data);
+            }
+        };
+
+        mediaRecorder.onstop = async () => {
+            // Parar todas las pistas del stream
+            stream.getTracks().forEach(track => track.stop());
+
+            // Crear blob con el audio grabado
+            const audioBlob = new Blob(audioChunks, { type: mimeType });
+
+            // Guardar en IndexedDB
+            await saveAudioToDB(currentVariation, audioBlob);
+
+            // Mostrar player
+            const audioUrl = URL.createObjectURL(audioBlob);
+            elements.audioOptions.style.display = 'none';
+            elements.recorderActive.style.display = 'none';
+            elements.playerContainer.style.display = 'flex';
+            elements.audioPlayer.src = audioUrl;
+
+            showNotification('Grabación guardada', 'success');
+        };
+
+        // Iniciar grabación
+        mediaRecorder.start();
+        recordingStartTime = Date.now();
+
+        // Actualizar UI
+        elements.audioOptions.style.display = 'none';
+        elements.recorderActive.style.display = 'flex';
+
+        // Timer
+        recordingTimer = setInterval(updateRecordingTime, 1000);
+        updateRecordingTime();
+
+    } catch (error) {
+        console.error('Error al acceder al micrófono:', error);
+        if (error.name === 'NotAllowedError') {
+            showNotification('Permiso de micrófono denegado', 'error');
+        } else {
+            showNotification('Error al iniciar grabación', 'error');
+        }
+    }
+}
+
+function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+        clearInterval(recordingTimer);
+    }
+}
+
+function updateRecordingTime() {
+    const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+    const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+    const seconds = (elapsed % 60).toString().padStart(2, '0');
+    elements.recTime.textContent = `${minutes}:${seconds}`;
+}
+
+// ==========================================
 // APLICACIÓN PRINCIPAL
 // ==========================================
 
@@ -252,14 +407,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     elements.dateCompleted = document.getElementById('dateCompleted');
     elements.notesTextarea = document.getElementById('notesTextarea');
     elements.autosaveIndicator = document.getElementById('autosaveIndicator');
-    elements.audioInput = document.getElementById('audioInput');
+
+    // Audio elements
+    elements.audioOptions = document.getElementById('audioOptions');
+    elements.recordBtn = document.getElementById('recordBtn');
     elements.uploadBtn = document.getElementById('uploadBtn');
-    elements.uploadArea = document.getElementById('uploadArea');
+    elements.audioInput = document.getElementById('audioInput');
+    elements.recorderActive = document.getElementById('recorderActive');
+    elements.recTime = document.getElementById('recTime');
+    elements.stopBtn = document.getElementById('stopBtn');
     elements.playerContainer = document.getElementById('playerContainer');
     elements.audioPlayer = document.getElementById('audioPlayer');
     elements.removeAudioBtn = document.getElementById('removeAudioBtn');
+
+    // Photo elements
+    elements.photoUploadArea = document.getElementById('photoUploadArea');
+    elements.photoUploadBtn = document.getElementById('photoUploadBtn');
+    elements.photoInput = document.getElementById('photoInput');
+    elements.photoPreviewContainer = document.getElementById('photoPreviewContainer');
+    elements.photoPreview = document.getElementById('photoPreview');
+    elements.removePhotoBtn = document.getElementById('removePhotoBtn');
+
+    // Navigation
     elements.prevBtn = document.getElementById('prevBtn');
     elements.nextBtn = document.getElementById('nextBtn');
+
+    // Backup
     elements.exportBtn = document.getElementById('exportBtn');
     elements.importBtn = document.getElementById('importBtn');
     elements.importInput = document.getElementById('importInput');
@@ -361,13 +534,28 @@ async function loadVariation(index) {
     const audioBlob = await loadAudioFromDB(index);
     if (audioBlob) {
         const audioUrl = URL.createObjectURL(audioBlob);
-        elements.uploadArea.style.display = 'none';
+        elements.audioOptions.style.display = 'none';
+        elements.recorderActive.style.display = 'none';
         elements.playerContainer.style.display = 'flex';
         elements.audioPlayer.src = audioUrl;
     } else {
-        elements.uploadArea.style.display = 'flex';
+        elements.audioOptions.style.display = 'flex';
+        elements.recorderActive.style.display = 'none';
         elements.playerContainer.style.display = 'none';
         elements.audioPlayer.src = '';
+    }
+
+    // Foto desde IndexedDB
+    const photoBlob = await loadPhotoFromDB(index);
+    if (photoBlob) {
+        const photoUrl = URL.createObjectURL(photoBlob);
+        elements.photoUploadArea.style.display = 'none';
+        elements.photoPreviewContainer.style.display = 'block';
+        elements.photoPreview.src = photoUrl;
+    } else {
+        elements.photoUploadArea.style.display = 'block';
+        elements.photoPreviewContainer.style.display = 'none';
+        elements.photoPreview.src = '';
     }
 
     // Actualizar sidebar
@@ -451,6 +639,10 @@ function setupEventListeners() {
         }, 500);
     });
 
+    // Grabar audio
+    elements.recordBtn.addEventListener('click', startRecording);
+    elements.stopBtn.addEventListener('click', stopRecording);
+
     // Upload audio
     elements.uploadBtn.addEventListener('click', () => {
         elements.audioInput.click();
@@ -459,11 +651,11 @@ function setupEventListeners() {
     elements.audioInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (file) {
-            // Guardar como Blob en IndexedDB
             await saveAudioToDB(currentVariation, file);
 
             const audioUrl = URL.createObjectURL(file);
-            elements.uploadArea.style.display = 'none';
+            elements.audioOptions.style.display = 'none';
+            elements.recorderActive.style.display = 'none';
             elements.playerContainer.style.display = 'flex';
             elements.audioPlayer.src = audioUrl;
 
@@ -476,12 +668,46 @@ function setupEventListeners() {
         if (confirm('¿Eliminar esta grabación?')) {
             await deleteAudioFromDB(currentVariation);
 
-            elements.uploadArea.style.display = 'flex';
+            elements.audioOptions.style.display = 'flex';
+            elements.recorderActive.style.display = 'none';
             elements.playerContainer.style.display = 'none';
             elements.audioPlayer.src = '';
             elements.audioInput.value = '';
 
             showNotification('Audio eliminado', 'info');
+        }
+    });
+
+    // Upload foto
+    elements.photoUploadBtn.addEventListener('click', () => {
+        elements.photoInput.click();
+    });
+
+    elements.photoInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            await savePhotoToDB(currentVariation, file);
+
+            const photoUrl = URL.createObjectURL(file);
+            elements.photoUploadArea.style.display = 'none';
+            elements.photoPreviewContainer.style.display = 'block';
+            elements.photoPreview.src = photoUrl;
+
+            showNotification('Foto guardada', 'success');
+        }
+    });
+
+    // Eliminar foto
+    elements.removePhotoBtn.addEventListener('click', async () => {
+        if (confirm('¿Eliminar esta foto?')) {
+            await deletePhotoFromDB(currentVariation);
+
+            elements.photoUploadArea.style.display = 'block';
+            elements.photoPreviewContainer.style.display = 'none';
+            elements.photoPreview.src = '';
+            elements.photoInput.value = '';
+
+            showNotification('Foto eliminada', 'info');
         }
     });
 
