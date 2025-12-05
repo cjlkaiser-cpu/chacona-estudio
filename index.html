@@ -108,9 +108,9 @@
 
                 <!-- Recording Section -->
                 <div class="recording-section">
-                    <h3>Mi Grabación</h3>
+                    <h3>Mis Grabaciones</h3>
                     <div class="recording-container">
-                        <!-- Estado inicial: botones grabar/subir -->
+                        <!-- Botones grabar/subir (siempre visibles) -->
                         <div class="audio-options" id="audioOptions">
                             <button class="record-btn" id="recordBtn">
                                 <span class="record-icon">🎤</span>
@@ -134,11 +134,8 @@
                                 <span>■</span> Parar
                             </button>
                         </div>
-                        <!-- Estado con audio guardado -->
-                        <div class="player-container" id="playerContainer" style="display: none;">
-                            <audio id="audioPlayer" controls></audio>
-                            <button class="remove-audio-btn" id="removeAudioBtn" title="Eliminar grabación">✕</button>
-                        </div>
+                        <!-- Lista de grabaciones -->
+                        <div class="recordings-list" id="recordingsList"></div>
                     </div>
                 </div>
 
@@ -173,7 +170,7 @@
         </main>
     </div>
 
-    <script src="js/data.js?v=3"></script>
-    <script src="js/app.js?v=3"></script>
+    <script src="js/data.js?v=4"></script>
+    <script src="js/app.js?v=4"></script>
 </body>
 </html>

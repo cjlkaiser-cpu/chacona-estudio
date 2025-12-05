@@ -822,6 +822,102 @@ body {
     background-color: #ef4444;
 }
 
+/* Recordings List */
+.recordings-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.recordings-list:empty {
+    display: none;
+}
+
+.recording-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background-color: var(--bg-tertiary);
+    border-radius: var(--radius);
+    transition: background-color 0.2s;
+}
+
+.recording-item:hover {
+    background-color: var(--border-color);
+}
+
+.recording-item.playing {
+    background-color: rgba(59, 130, 246, 0.2);
+    border: 1px solid var(--accent-blue);
+}
+
+.recording-icon {
+    font-size: 1.2rem;
+    opacity: 0.7;
+}
+
+.recording-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.recording-name {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.recording-date {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.recording-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.play-btn, .delete-recording-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+    background-color: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.play-btn:hover {
+    background-color: var(--accent-blue);
+    border-color: var(--accent-blue);
+    color: white;
+}
+
+.play-btn.playing {
+    background-color: var(--accent-blue);
+    border-color: var(--accent-blue);
+    color: white;
+}
+
+.delete-recording-btn:hover {
+    background-color: #ef4444;
+    border-color: #ef4444;
+    color: white;
+}
+
+/* Audio player oculto para reproducción */
+.hidden-audio-player {
+    display: none;
+}
+
 /* Mobile backup buttons */
 @media (max-width: 768px) {
     .backup-buttons {
@@ -841,5 +937,17 @@ body {
 
     .audio-separator {
         display: none;
+    }
+
+    .recording-item {
+        flex-wrap: wrap;
+    }
+
+    .recording-info {
+        flex: 1 1 60%;
+    }
+
+    .recording-actions {
+        flex: 0 0 auto;
     }
 }

@@ -3,7 +3,7 @@
 // ==========================================
 
 const DB_NAME = 'ChaconaStudyDB';
-const DB_VERSION = 2; // Incrementado para añadir store de fotos
+const DB_VERSION = 3; // Incrementado para múltiples grabaciones
 let db = null;
 
 // Inicializar IndexedDB
@@ -19,20 +19,27 @@ function initDB() {
 
         request.onupgradeneeded = (event) => {
             const database = event.target.result;
+            const oldVersion = event.oldVersion;
 
             // Store para datos de estudio (notas, completado, fecha)
             if (!database.objectStoreNames.contains('studyData')) {
                 database.createObjectStore('studyData', { keyPath: 'id' });
             }
 
-            // Store para archivos de audio (binarios)
-            if (!database.objectStoreNames.contains('audioFiles')) {
-                database.createObjectStore('audioFiles', { keyPath: 'id' });
-            }
-
             // Store para fotos de partitura (binarios)
             if (!database.objectStoreNames.contains('photoFiles')) {
                 database.createObjectStore('photoFiles', { keyPath: 'id' });
+            }
+
+            // Migración: de audioFiles antiguo a recordings (múltiples por variación)
+            if (oldVersion < 3) {
+                // Eliminar store antiguo si existe
+                if (database.objectStoreNames.contains('audioFiles')) {
+                    database.deleteObjectStore('audioFiles');
+                }
+                // Crear nuevo store para grabaciones múltiples
+                const recordingsStore = database.createObjectStore('recordings', { keyPath: 'recordingId' });
+                recordingsStore.createIndex('variationId', 'variationId', { unique: false });
             }
         };
     });
@@ -71,48 +78,67 @@ function loadStudyDataFromDB() {
     });
 }
 
-// Guardar audio
-function saveAudioToDB(index, audioBlob) {
+// Guardar grabación (múltiples por variación)
+function saveRecordingToDB(variationId, audioBlob, name = null) {
     if (!db) return Promise.resolve();
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['audioFiles'], 'readwrite');
-        const store = transaction.objectStore('audioFiles');
-        const request = store.put({ id: index, audio: audioBlob });
-        request.onsuccess = () => resolve();
+    return new Promise(async (resolve, reject) => {
+        // Contar grabaciones existentes para nombrar
+        const existingRecordings = await getRecordingsForVariation(variationId);
+        const takeNumber = existingRecordings.length + 1;
+
+        const recording = {
+            recordingId: `${variationId}_${Date.now()}`,
+            variationId: variationId,
+            name: name || `Toma ${takeNumber}`,
+            date: new Date().toISOString(),
+            audio: audioBlob
+        };
+
+        const transaction = db.transaction(['recordings'], 'readwrite');
+        const store = transaction.objectStore('recordings');
+        const request = store.put(recording);
+        request.onsuccess = () => resolve(recording);
         request.onerror = () => reject(request.error);
     });
 }
 
-// Cargar audio
-function loadAudioFromDB(index) {
-    if (!db) return Promise.resolve(null);
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['audioFiles'], 'readonly');
-        const store = transaction.objectStore('audioFiles');
-        const request = store.get(index);
-        request.onsuccess = () => resolve(request.result?.audio || null);
-        request.onerror = () => reject(request.error);
-    });
-}
-
-// Eliminar audio
-function deleteAudioFromDB(index) {
-    if (!db) return Promise.resolve();
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['audioFiles'], 'readwrite');
-        const store = transaction.objectStore('audioFiles');
-        const request = store.delete(index);
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
-    });
-}
-
-// Obtener todos los audios
-function getAllAudiosFromDB() {
+// Obtener grabaciones de una variación
+function getRecordingsForVariation(variationId) {
     if (!db) return Promise.resolve([]);
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['audioFiles'], 'readonly');
-        const store = transaction.objectStore('audioFiles');
+        const transaction = db.transaction(['recordings'], 'readonly');
+        const store = transaction.objectStore('recordings');
+        const index = store.index('variationId');
+        const request = index.getAll(variationId);
+        request.onsuccess = () => {
+            // Ordenar por fecha (más reciente primero)
+            const recordings = request.result.sort((a, b) =>
+                new Date(b.date) - new Date(a.date)
+            );
+            resolve(recordings);
+        };
+        request.onerror = () => reject(request.error);
+    });
+}
+
+// Eliminar una grabación específica
+function deleteRecordingFromDB(recordingId) {
+    if (!db) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['recordings'], 'readwrite');
+        const store = transaction.objectStore('recordings');
+        const request = store.delete(recordingId);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+    });
+}
+
+// Obtener todas las grabaciones (para exportar)
+function getAllRecordingsFromDB() {
+    if (!db) return Promise.resolve([]);
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['recordings'], 'readonly');
+        const store = transaction.objectStore('recordings');
         const request = store.getAll();
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
@@ -174,15 +200,15 @@ function getAllPhotosFromDB() {
 async function exportData() {
     try {
         const studyData = await loadStudyDataFromDB();
-        const audios = await getAllAudiosFromDB();
+        const recordings = await getAllRecordingsFromDB();
         const photos = await getAllPhotosFromDB();
 
-        // Convertir audios (Blob) a base64 para exportar
-        const audiosBase64 = await Promise.all(
-            audios.map(async (item) => {
+        // Convertir grabaciones (Blob) a base64 para exportar
+        const recordingsBase64 = await Promise.all(
+            recordings.map(async (item) => {
                 if (item.audio instanceof Blob) {
                     const base64 = await blobToBase64(item.audio);
-                    return { id: item.id, audio: base64 };
+                    return { ...item, audio: base64 };
                 }
                 return item;
             })
@@ -200,10 +226,10 @@ async function exportData() {
         );
 
         const exportObj = {
-            version: 2,
+            version: 3,
             exportDate: new Date().toISOString(),
             studyData: studyData,
-            audioFiles: audiosBase64,
+            recordings: recordingsBase64,
             photoFiles: photosBase64
         };
 
@@ -238,12 +264,36 @@ async function importData(file) {
             await saveStudyDataToDB(parseInt(index), item);
         }
 
-        // Importar audios (convertir base64 a Blob)
-        if (data.audioFiles) {
+        // Importar grabaciones (nuevo formato v3)
+        if (data.recordings) {
+            for (const item of data.recordings) {
+                if (item.audio) {
+                    const blob = base64ToBlob(item.audio);
+                    // Guardar directamente con la estructura completa
+                    const recording = {
+                        recordingId: item.recordingId,
+                        variationId: item.variationId,
+                        name: item.name,
+                        date: item.date,
+                        audio: blob
+                    };
+                    const transaction = db.transaction(['recordings'], 'readwrite');
+                    const store = transaction.objectStore('recordings');
+                    await new Promise((resolve, reject) => {
+                        const request = store.put(recording);
+                        request.onsuccess = () => resolve();
+                        request.onerror = () => reject(request.error);
+                    });
+                }
+            }
+        }
+
+        // Compatibilidad con formato antiguo v2 (audioFiles)
+        if (data.audioFiles && !data.recordings) {
             for (const item of data.audioFiles) {
                 if (item.audio) {
                     const blob = base64ToBlob(item.audio);
-                    await saveAudioToDB(item.id, blob);
+                    await saveRecordingToDB(item.id, blob, 'Toma 1 (importada)');
                 }
             }
         }
@@ -343,15 +393,13 @@ async function startRecording() {
             // Crear blob con el audio grabado
             const audioBlob = new Blob(audioChunks, { type: mimeType });
 
-            // Guardar en IndexedDB
-            await saveAudioToDB(currentVariation, audioBlob);
+            // Guardar en IndexedDB (nueva grabación)
+            await saveRecordingToDB(currentVariation, audioBlob);
 
-            // Mostrar player
-            const audioUrl = URL.createObjectURL(audioBlob);
-            elements.audioOptions.style.display = 'none';
+            // Mostrar botones y actualizar lista
+            elements.audioOptions.style.display = 'flex';
             elements.recorderActive.style.display = 'none';
-            elements.playerContainer.style.display = 'flex';
-            elements.audioPlayer.src = audioUrl;
+            await renderRecordingsList(currentVariation);
 
             showNotification('Grabación guardada', 'success');
         };
@@ -393,6 +441,130 @@ function updateRecordingTime() {
 }
 
 // ==========================================
+// LISTA DE GRABACIONES
+// ==========================================
+
+let currentlyPlayingAudio = null;
+let currentlyPlayingButton = null;
+
+async function renderRecordingsList(variationId) {
+    const recordings = await getRecordingsForVariation(variationId);
+    const container = elements.recordingsList;
+
+    if (recordings.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = recordings.map(rec => {
+        const date = new Date(rec.date).toLocaleDateString('es-ES', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        return `
+            <div class="recording-item" data-recording-id="${rec.recordingId}">
+                <span class="recording-icon">🎵</span>
+                <div class="recording-info">
+                    <div class="recording-name">${rec.name}</div>
+                    <div class="recording-date">${date}</div>
+                </div>
+                <div class="recording-actions">
+                    <button class="play-btn" data-recording-id="${rec.recordingId}" title="Reproducir">
+                        ▶
+                    </button>
+                    <button class="delete-recording-btn" data-recording-id="${rec.recordingId}" title="Eliminar">
+                        ✕
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Event listeners para reproducir
+    container.querySelectorAll('.play-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const recordingId = e.currentTarget.dataset.recordingId;
+            await playRecording(recordingId, e.currentTarget);
+        });
+    });
+
+    // Event listeners para eliminar
+    container.querySelectorAll('.delete-recording-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const recordingId = e.currentTarget.dataset.recordingId;
+            if (confirm('¿Eliminar esta grabación?')) {
+                await deleteRecordingFromDB(recordingId);
+                await renderRecordingsList(variationId);
+                showNotification('Grabación eliminada', 'info');
+            }
+        });
+    });
+}
+
+async function playRecording(recordingId, button) {
+    // Si ya hay algo reproduciéndose
+    if (currentlyPlayingAudio) {
+        currentlyPlayingAudio.pause();
+        currentlyPlayingAudio = null;
+        if (currentlyPlayingButton) {
+            currentlyPlayingButton.textContent = '▶';
+            currentlyPlayingButton.classList.remove('playing');
+            currentlyPlayingButton.closest('.recording-item').classList.remove('playing');
+        }
+
+        // Si es el mismo botón, solo parar
+        if (currentlyPlayingButton === button) {
+            currentlyPlayingButton = null;
+            return;
+        }
+    }
+
+    // Obtener la grabación de IndexedDB
+    const recordings = await getRecordingsForVariation(currentVariation);
+    const recording = recordings.find(r => r.recordingId === recordingId);
+
+    if (!recording || !recording.audio) {
+        showNotification('Error al cargar la grabación', 'error');
+        return;
+    }
+
+    // Crear audio y reproducir
+    const audioUrl = URL.createObjectURL(recording.audio);
+    const audio = new Audio(audioUrl);
+
+    audio.onended = () => {
+        button.textContent = '▶';
+        button.classList.remove('playing');
+        button.closest('.recording-item').classList.remove('playing');
+        currentlyPlayingAudio = null;
+        currentlyPlayingButton = null;
+        URL.revokeObjectURL(audioUrl);
+    };
+
+    audio.onerror = () => {
+        showNotification('Error al reproducir', 'error');
+        button.textContent = '▶';
+        button.classList.remove('playing');
+        button.closest('.recording-item').classList.remove('playing');
+        currentlyPlayingAudio = null;
+        currentlyPlayingButton = null;
+    };
+
+    currentlyPlayingAudio = audio;
+    currentlyPlayingButton = button;
+
+    button.textContent = '⏸';
+    button.classList.add('playing');
+    button.closest('.recording-item').classList.add('playing');
+
+    audio.play();
+}
+
+// ==========================================
 // APLICACIÓN PRINCIPAL
 // ==========================================
 
@@ -426,9 +598,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         elements.recorderActive = document.getElementById('recorderActive');
         elements.recTime = document.getElementById('recTime');
         elements.stopBtn = document.getElementById('stopBtn');
-        elements.playerContainer = document.getElementById('playerContainer');
-        elements.audioPlayer = document.getElementById('audioPlayer');
-        elements.removeAudioBtn = document.getElementById('removeAudioBtn');
+        elements.recordingsList = document.getElementById('recordingsList');
 
         // Photo elements
         elements.photoUploadArea = document.getElementById('photoUploadArea');
@@ -549,20 +719,17 @@ async function loadVariation(index) {
     // Notas
     elements.notesTextarea.value = data.notes || '';
 
-    // Audio desde IndexedDB
-    const audioBlob = await loadAudioFromDB(index);
-    if (audioBlob) {
-        const audioUrl = URL.createObjectURL(audioBlob);
-        elements.audioOptions.style.display = 'none';
-        elements.recorderActive.style.display = 'none';
-        elements.playerContainer.style.display = 'flex';
-        elements.audioPlayer.src = audioUrl;
-    } else {
-        elements.audioOptions.style.display = 'flex';
-        elements.recorderActive.style.display = 'none';
-        elements.playerContainer.style.display = 'none';
-        elements.audioPlayer.src = '';
+    // Parar audio si está reproduciéndose
+    if (currentlyPlayingAudio) {
+        currentlyPlayingAudio.pause();
+        currentlyPlayingAudio = null;
+        currentlyPlayingButton = null;
     }
+
+    // Mostrar lista de grabaciones
+    elements.audioOptions.style.display = 'flex';
+    elements.recorderActive.style.display = 'none';
+    await renderRecordingsList(index);
 
     // Foto desde IndexedDB
     const photoBlob = await loadPhotoFromDB(index);
@@ -670,30 +837,10 @@ function setupEventListeners() {
     elements.audioInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (file) {
-            await saveAudioToDB(currentVariation, file);
-
-            const audioUrl = URL.createObjectURL(file);
-            elements.audioOptions.style.display = 'none';
-            elements.recorderActive.style.display = 'none';
-            elements.playerContainer.style.display = 'flex';
-            elements.audioPlayer.src = audioUrl;
-
-            showNotification('Audio guardado', 'success');
-        }
-    });
-
-    // Eliminar audio
-    elements.removeAudioBtn.addEventListener('click', async () => {
-        if (confirm('¿Eliminar esta grabación?')) {
-            await deleteAudioFromDB(currentVariation);
-
-            elements.audioOptions.style.display = 'flex';
-            elements.recorderActive.style.display = 'none';
-            elements.playerContainer.style.display = 'none';
-            elements.audioPlayer.src = '';
+            await saveRecordingToDB(currentVariation, file);
+            await renderRecordingsList(currentVariation);
             elements.audioInput.value = '';
-
-            showNotification('Audio eliminado', 'info');
+            showNotification('Audio guardado', 'success');
         }
     });
 
